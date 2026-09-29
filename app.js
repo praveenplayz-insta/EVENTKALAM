@@ -56,17 +56,49 @@ const real={
  async allRegs(){return ok(await sb.from('registrations').select('*,profiles(name,email,phone),events(title,date)').order('created_at',{ascending:false}))},
  async members(){return ok(await sb.from('profiles').select('*').eq('role','user').order('created_at',{ascending:false}))}
 };
-let API=mock,ME=null,MODE='in',NEXT='',TAB='events',EV=[],MY=[],AE=[],AR=[],AM=[];
+let API=mock,ME=null,MODE='in',NEXT='',TAB='home',EV=[],MY=[],AE=[],AR=[],AM=[];
 
 /* ---------- views ---------- */
 const nav=()=>`${API===mock?'<div class="demo">Demo mode: data stays in this browser only. Admin login: admin@demo.com / admin123</div>':''}
-<header class="nav"><a class="brand" href="#/">EventKalam</a><nav><a href="#/">Events</a>${ME?'<a href="#/my">My registrations</a>':''}${ME?.role==='admin'?'<a href="#/admin">Admin</a>':''}
+<header class="nav"><a class="brand" href="#/">EventKalam</a><nav><a href="#/">Home</a><a href="#/events">Events</a><a href="#/about">About</a><a href="#/showcase">Showcase</a><a href="#" data-a="scrollContact">Contact</a>${ME?'<a href="#/my">My registrations</a>':''}${ME?.role==='admin'?'<a href="#/admin">Admin</a>':''}
 ${ME?`<button class="btn sm ghost" data-a="logout">Log out (${h(ME.name.split(' ')[0])})</button>`:'<a class="btn sm" href="#/login">Log in</a>'}</nav></header>`;
+const footer=()=>`<footer class="site-footer" id="footer-contact"><div class="foot-grid">
+<div><h4>EventKalam</h4><p>Robokalam's event booking and management platform — discover, register and manage tech events with ease.</p></div>
+<div><h4>Quick Links</h4><a href="#/">Home</a><a href="#/events">Events</a><a href="#/about">About</a><a href="#/showcase">Showcase</a></div>
+<div><h4>Contact Us</h4>
+<div class="contact-info-row"><span class="ico">🌐</span><a href="https://robokalam.com/" target="_blank" rel="noopener">robokalam.com</a></div>
+<div class="contact-info-row"><span class="ico">✉️</span><a href="mailto:info@robokalam.com">info@robokalam.com</a></div>
+<form data-f="contact" style="margin-top:10px"><input name="name" placeholder="Your name" required style="margin-bottom:6px"><input name="email" type="email" placeholder="Your email" required style="margin-bottom:6px"><textarea name="message" rows="2" placeholder="Message" required style="margin-bottom:6px"></textarea><button class="btn sm">Send message</button></form>
+</div></div>
+<p class="foot-bottom">© ${new Date().getFullYear()} Robokalam Technologies. Built for the EventKalam internship project.</p></footer>`;
 const needLogin=()=>'<div class="card pad">Please <a href="#/login">log in</a> to see this page.</div>';
 const card=e=>`<a class="card ev" href="#/event/${e.id}"><div class="ph">${e.image_url?`<img src="${h(e.image_url)}" alt="" onerror="this.remove()">`:''}<span>${h(e.category)}</span></div><div class="pad"><h3>${h(e.title)}</h3><p class="mu">${fmt(e.date)}, ${h(e.city)}</p><div class="row"><b>${rs(e.price)}</b><span class="${left(e)<=5?'warnt':'mu'}">${left(e)>0?left(e)+' seats left':'Full'}</span></div></div></a>`;
-async function vHome(){EV=(await API.events()).filter(e=>e.status==='published'&&e.date>=today());
+async function vEvents(){EV=(await API.events()).filter(e=>e.status==='published'&&e.date>=today());
  return `<section class="hero"><h1>Find your next workshop, bootcamp or hackathon</h1><p>Create a free account, pick an event and get your seat confirmed.</p></section>
  <div class="filters"><input id="q" placeholder="Search events" oninput="grid()"><select id="cat" onchange="grid()"><option value="">All categories</option>${CATS.map(c=>`<option>${c}</option>`).join('')}</select><input id="city" placeholder="City" oninput="grid()"></div><div id="grid" class="grid"></div>`}
+async function vHome(){EV=(await API.events()).filter(e=>e.status==='published'&&e.date>=today());
+ const featured=EV.slice(0,3);
+ return `<section class="hero big reveal"><div class="blob b1"></div><div class="blob b2"></div>
+ <p class="eyebrow">Robokalam presents</p>
+ <h1>Where great ideas<br>find their stage.</h1>
+ <p>EventKalam is Robokalam's home for hackathons, robotics bootcamps, AI/ML workshops and open-mic nights. Sign up once, book a seat, and show up ready to build.</p>
+ <div class="cta-row"><a class="btn big glow" href="#/events">Explore Events →</a><a class="btn big ghost" href="#/about">Meet the Founder</a></div>
+ <div class="tagrow">${['Robotics','AI / ML','Hackathons','Open Mic','Skill Workshops'].map(t=>`<span class="tagpill">${t}</span>`).join('')}</div>
+ </section>
+
+ <div class="section-h reveal"><h2>Happening now</h2><p>A few upcoming events, picked fresh.</p></div>
+ <div class="grid">${featured.length?featured.map(card).join(''):'<p class="mu">No published events yet. Check back soon, or explore what we have run before.</p>'}</div>
+ ${featured.length?'<p style="text-align:center;margin:14px 0"><a href="#/events">See all events →</a></p>':''}
+
+ <div class="section-h reveal"><h2>Moments from past events</h2><p>Open mics, hackathons and AI upskilling sessions across Telangana.</p></div>
+ <div class="teaser-grid reveal">${['showcase-openmic.jpg','showcase-aiforall.jpg','showcase-felicitation.jpg'].map(s=>`<div class="shot sm"><img src="${s}" alt="Robokalam event moment"></div>`).join('')}</div>
+ <p style="text-align:center;margin:14px 0"><a href="#/showcase">View the full showcase →</a></p>
+
+ <div class="founder-teaser card reveal"><img src="founder.jpg" alt="Mohammed Sajeed, Founder of Robokalam">
+ <div><p class="eyebrow">From our founder</p><blockquote>"My vision is to make Robokalam a globally recognised benchmark in technology development and STEM innovation — inspiring young minds and supporting digital transformation."</blockquote>
+ <p><b>Mohammed Sajeed</b> <span class="mu">· Founder, Robokalam</span></p><a href="#/about">Read his full story →</a></div></div>
+
+ <section class="closing-cta reveal"><h2>Ready to build tomorrow with us?</h2><p>Create your free account and grab a seat at the next event.</p><a class="btn big glow" href="${ME?'#/events':'#/login'}">${ME?'Browse Events':'Get Started'}</a></section>`}
 function grid(){const q=$('#q').value.toLowerCase(),c=$('#cat').value,t=$('#city').value.toLowerCase();
  const l=EV.filter(e=>(!q||(e.title+e.description).toLowerCase().includes(q))&&(!c||e.category===c)&&(!t||e.city.toLowerCase().includes(t)));
  $('#grid').innerHTML=l.length?l.map(card).join(''):'<p class="mu">No upcoming events match. Try a different search.</p>'}
@@ -76,6 +108,28 @@ async function vEvent(id){const e=(await API.events()).find(x=>x.id===id);if(!e)
  return `<a href="#/">Back to events</a><div class="card pad" style="margin-top:8px"><span class="chip">${h(e.category)}</span> ${chip(e.status)}<h1>${h(e.title)}</h1>
  <div class="facts"><div><small>Date</small>${fmt(e.date)}</div><div><small>Time</small>${h(e.start_time)} to ${h(e.end_time)}</div><div><small>Venue</small>${h(e.venue)}, ${h(e.city)}</div><div><small>Fee</small>${rs(e.price)}</div><div><small>Seats left</small>${left(e)} of ${e.capacity}</div></div>
  <p class="desc">${h(e.description)}</p>${b}</div>`}
+function vAbout(){return `<div class="section-h"><h2>About Robokalam</h2><p>The team and vision behind EventKalam.</p></div>
+<div class="card founder"><img src="founder.jpg" alt="Mohammed Sajeed, Founder of Robokalam">
+<div><p class="role">Founder, Robokalam</p><h2>Mohammed Sajeed</h2>
+<p>Sajeed Sir, the Founder of Robokalam, is a visionary leader passionate about technology, innovation, and creating meaningful opportunities for students and organisations. His work reflects a strong commitment to integrity, trust, transparency, accountability and professionalism.</p>
+<p>Through Robokalam, he focuses on empowering enterprises and educational institutions with cutting-edge software solutions, AI innovations, and hands-on 21st-century technology labs. He is also contributing to the development of EventKalam itself, designed to make event organisation and participation more convenient through technology.</p>
+<blockquote>"My vision is to make Robokalam a globally recognised benchmark in technology development and STEM innovation — inspiring young minds and supporting digital transformation for forward-thinking organisations."</blockquote>
+<p style="margin-top:14px"><a href="https://robokalam.com/" target="_blank" rel="noopener">Learn more at robokalam.com →</a></p>
+</div></div>
+<div class="value-grid">${['Integrity','Trust','Transparency','Accountability','Professionalism'].map(v=>`<div class="card">${v}</div>`).join('')}</div>
+<div class="section-h"><h2>Our Team</h2><p>Behind every Robokalam event is a team of mentors, interns and volunteers.</p></div>
+<div class="card team-note pad">Robokalam is powered by a dedicated group of employees, mentors and student interns who run workshops, hackathons and open-mic events across Telangana. Team profiles are being added soon.</div>`}
+function vShowcase(){const shots=[
+ ['showcase-openmic.jpg','Warangal Open Mic — great ideas build tomorrow together'],
+ ['showcase-openmic2.jpg','Open Mic — speakers and audience engagement'],
+ ['showcase-aiforall.jpg','AI for ALL — AI upskilling session with polytechnic students'],
+ ['showcase-guestspeaker.jpg','Guest speaker session on World Youth Skills Day'],
+ ['showcase-felicitation.jpg','Felicitating a young achiever'],
+ ['showcase-groupphoto.jpg','Open Mic — the whole crew at the end of the night'],
+];
+ return `<div class="section-h"><h2>Event Showcase</h2><p>A look at how Robokalam events come together — from open mics to AI upskilling sessions.</p></div>
+ <div class="showcase-grid">${shots.map(([src,cap],i)=>`<button class="shot" data-a="lightbox" data-id="${i}"><img src="${src}" alt="${h(cap)}" loading="lazy"><span class="cap">${h(cap)}</span></button>`).join('')}</div>`}
+window.SHOTS=[['showcase-openmic.jpg','Warangal Open Mic — great ideas build tomorrow together'],['showcase-openmic2.jpg','Open Mic — speakers and audience engagement'],['showcase-aiforall.jpg','AI for ALL — AI upskilling session with polytechnic students'],['showcase-guestspeaker.jpg','Guest speaker session on World Youth Skills Day'],['showcase-felicitation.jpg','Felicitating a young achiever'],['showcase-groupphoto.jpg','Open Mic — the whole crew at the end of the night']];
 const vLogin=()=>`<div class="card pad auth"><h2>${MODE==='in'?'Log in':'Create your account'}</h2><form data-f="auth">
 ${MODE==='up'?'<label>Full name<input name="name" required></label><label>Phone<input name="phone" type="tel" required minlength="10" maxlength="15"></label>':''}
 <label>Email<input name="email" type="email" required></label><label>Password${MODE==='up'?' (8+ characters)':''}<input name="pw" type="password" required minlength="${MODE==='up'?8:1}"></label>
@@ -87,8 +141,21 @@ async function vMy(){if(!ME)return needLogin();MY=await API.myRegs(ME.id);const 
 async function vAdmin(){if(ME?.role!=='admin')return '<div class="card pad">Admin access only.</div>';[AE,AR,AM]=await Promise.all([API.events(),API.allRegs(),API.members()]);
  const rev=AR.filter(r=>r.payment_status==='paid').reduce((s,r)=>s+ +r.amount,0);
  const st=(a,b)=>`<div class="card pad"><small>${a}</small><b>${b}</b></div>`;
- return `<h2>Admin dashboard</h2><div class="stats">${st('Events',AE.length)}${st('Members',AM.length)}${st('Confirmed seats',AR.filter(r=>r.status==='confirmed').length)}${st('Revenue','₹'+rev)}</div>
- <div class="tabs">${['events','registrations','members'].map(t=>`<button class="tab ${t===TAB?'on':''}" data-a="tab" data-id="${t}">${t}</button>`).join('')}</div>${TAB==='events'?tEvents():TAB==='members'?tMembers():tRegs()}`}
+ const stats=`<div class="stats">${st('Events',AE.length)}${st('Members',AM.length)}${st('Confirmed seats',AR.filter(r=>r.status==='confirmed').length)}${st('Revenue','₹'+rev)}</div>`;
+ return `<div class="admin-hero reveal"><p class="eyebrow">Admin dashboard</p><h2>Welcome back, ${h(ME.name.split(' ')[0])} 👋</h2><p class="mu">Here's what's happening across EventKalam right now.</p></div>
+ ${stats}
+ <div class="tabs">${['home','events','registrations','members'].map(t=>`<button class="tab ${t===TAB?'on':''}" data-a="tab" data-id="${t}">${t}</button>`).join('')}</div>
+ ${TAB==='home'?tAdminHome():TAB==='events'?tEvents():TAB==='members'?tMembers():tRegs()}`}
+const tAdminHome=()=>{const recent=AR.slice(0,5);
+ return `<div class="quick-grid">
+ <button class="card pad quick" data-a="newEv"><span class="qicon">➕</span><b>Create Event</b><span class="mu">Publish a new workshop or hackathon</span></button>
+ <button class="card pad quick" data-a="tab" data-id="registrations"><span class="qicon">🧾</span><b>View Registrations</b><span class="mu">Search, filter and export CSV</span></button>
+ <button class="card pad quick" data-a="tab" data-id="members"><span class="qicon">👥</span><b>View Members</b><span class="mu">Everyone who has signed up</span></button>
+ <button class="card pad quick" data-a="tab" data-id="events"><span class="qicon">📅</span><b>Manage Events</b><span class="mu">Edit, publish or delete events</span></button>
+ </div>
+ <div class="section-h"><h3>Recent registrations</h3></div>
+ <div class="scroll"><table><tr><th>Member</th><th>Event</th><th>Status</th><th>Payment</th><th>Date</th></tr>
+ ${recent.map(r=>`<tr><td>${h(r.profiles?.name)}</td><td>${h(r.events?.title)}</td><td>${chip(r.status)}</td><td>${chip(r.payment_status)}</td><td>${h(String(r.created_at).slice(0,10))}</td></tr>`).join('')||'<tr><td colspan="5" class="mu">No registrations yet.</td></tr>'}</table></div>`};
 const tEvents=()=>`<div class="row"><h3>Events</h3><button class="btn sm" data-a="newEv">New event</button></div><div class="scroll"><table><tr><th>Title</th><th>Date</th><th>City</th><th>Fee</th><th>Seats</th><th>Status</th><th></th></tr>
 ${AE.map(e=>`<tr><td>${h(e.title)}</td><td>${fmt(e.date)}</td><td>${h(e.city)}</td><td>${rs(e.price)}</td><td>${e.registered_count}/${e.capacity}</td><td>${chip(e.status)}</td><td class="acts"><button class="btn sm ghost" data-a="editEv" data-id="${e.id}">Edit</button><button class="btn sm ghost" data-a="toggle" data-id="${e.id}">${e.status==='published'?'Unpublish':'Publish'}</button><button class="btn sm danger" data-a="delEv" data-id="${e.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="7" class="mu">No events yet. Select New event to create the first one.</td></tr>'}</table></div>`;
 const tMembers=()=>`<h3>Registered members</h3><div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Joined</th></tr>${AM.map(u=>`<tr><td>${h(u.name)}</td><td>${h(u.email)}</td><td>${h(u.phone)}</td><td>${h(String(u.created_at).slice(0,10))}</td></tr>`).join('')||'<tr><td colspan="4" class="mu">No members yet.</td></tr>'}</table></div>`;
@@ -111,6 +178,10 @@ const evForm=e=>{e=e||{status:'draft',category:CATS[0],capacity:50,price:0};cons
 
 /* ---------- actions ---------- */
 const A={closeM,
+ scrollContact(){$('#footer-contact')?.scrollIntoView({behavior:'smooth'})},
+ lightbox(id){closeM();const[src,cap]=window.SHOTS[+id];const lb=document.createElement('div');lb.className='lightbox';lb.id='m';
+  lb.innerHTML=`<button class="lb-close" data-a="closeM">✕</button><div><img src="${src}" alt="${h(cap)}"><p class="lb-cap">${h(cap)}</p></div>`;
+  document.body.appendChild(lb);lb.addEventListener('click',e=>{if(e.target===lb)closeM()})},
  mode(){MODE=MODE==='in'?'up':'in';route()},
  async logout(){await API.signOut();ME=null;go('#/')},
  async reg(id){if(!ME){NEXT=location.hash;toast('Log in to register for this event');return go('#/login')}const r=await API.register(id);if(+r.amount>0)return payModal(r);toast('Registered. Your ID is '+r.code);go('#/my')},
@@ -128,6 +199,9 @@ const A={closeM,
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(r=>r.map(c).join(',')).join('\r\n')],{type:'text/csv'}));a.download='eventkalam-registrations.csv';a.click();toast('CSV exported')}
 };
 const F={
+ contact(f){const d=Object.fromEntries(new FormData(f));
+  location.href=`mailto:info@robokalam.com?subject=${encodeURIComponent('Message from '+d.name+' via EventKalam')}&body=${encodeURIComponent(d.message+'\n\nFrom: '+d.name+' ('+d.email+')')}`;
+  toast('Opening your email app to send the message...');f.reset()},
  async auth(f){const d=Object.fromEntries(new FormData(f));ME=MODE==='up'?await API.signUp(d.name.trim(),d.email.trim(),d.phone.trim(),d.pw):await API.signIn(d.email.trim(),d.pw);
   if(!ME){MODE='in';toast('Account created. Confirm your email, then log in.');return route()}
   toast('Welcome, '+ME.name);const n=NEXT;NEXT='';go(n||(ME.role==='admin'?'#/admin':'#/'))},
@@ -141,9 +215,12 @@ document.addEventListener('submit',e=>{const f=e.target.closest('[data-f]');if(!
 
 /* ---------- router and boot ---------- */
 async function route(){const[,pg,id]=(location.hash.slice(1)||'/').split('/');let v;
- try{v=pg==='event'?await vEvent(id):pg==='login'?vLogin():pg==='my'?await vMy():pg==='admin'?await vAdmin():await vHome()}
+ try{v=pg==='event'?await vEvent(id):pg==='login'?vLogin():pg==='my'?await vMy():pg==='admin'?await vAdmin():pg==='about'?vAbout():pg==='showcase'?vShowcase():pg==='events'?await vEvents():await vHome()}
  catch(e){v=`<div class="card pad"><b>Something went wrong</b><p class="mu">${h(e.message)}</p></div>`}
- $('#app').innerHTML=nav()+`<main class="wrap">${v}</main>`;scrollTo(0,0);if($('#grid'))grid();if($('#rt'))drawRegs()}
+ $('#app').innerHTML=nav()+`<main class="wrap">${v}</main>`+footer();scrollTo(0,0);if($('#grid'))grid();if($('#rt'))drawRegs();reveal()}
+const reveal=()=>{const els=document.querySelectorAll('.reveal');if(!('IntersectionObserver'in window)){els.forEach(e=>e.classList.add('show'));return}
+ const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('show');io.unobserve(en.target)}}),{threshold:.12});
+ els.forEach(e=>io.observe(e))};
 addEventListener('hashchange',route);
 (async()=>{try{if(SUPABASE_URL&&SUPABASE_KEY){await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';s.onload=ok;s.onerror=()=>no(Error('Could not load the Supabase library'));document.head.appendChild(s)});
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);API=real}
