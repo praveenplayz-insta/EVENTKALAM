@@ -49,8 +49,14 @@ const real={
  async events(){return ok(await sb.from('events').select('*').order('date'))},
  async saveEvent(ev){const{id,...f}=ev;ok(await(id?sb.from('events').update(f).eq('id',id):sb.from('events').insert(f)));return 0},
  async delEvent(id){ok(await sb.from('events').delete().eq('id',id))},
- async register(id){return ok(await sb.rpc('register_for_event',{p_event:id}))},
- async pay(id){ok(await sb.rpc('mock_pay',{p_reg:id}))},
+ async register(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const res=await fetch(SERVER_URL+'/api/registrations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({eventId:id})});
+  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Could not register. Please try again');return j.registration},
+ async pay(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const hl=await(await fetch(SERVER_URL+'/api/health')).json().catch(()=>({}));if(hl.payments!=='mock')throw Error('Online payment is being set up. Please try again soon.');
+  const reg=ok(await sb.from('registrations').select('order_id').eq('id',id).single());
+  const res=await fetch(SERVER_URL+'/api/payments/verify',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({registrationId:id,razorpay_order_id:reg.order_id,razorpay_payment_id:'mock_pay_'+Date.now(),razorpay_signature:'mock_signature'})});
+  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Payment failed. Please try again')},
  async cancel(id){ok(await sb.rpc('cancel_registration',{p_reg:id}))},
  async myRegs(u){return ok(await sb.from('registrations').select('*,events(*)').eq('user_id',u).order('created_at',{ascending:false}))},
  async allRegs(){return ok(await sb.from('registrations').select('*,profiles(name,email,phone),events(title,date)').order('created_at',{ascending:false}))},
