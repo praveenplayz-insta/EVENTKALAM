@@ -47,16 +47,26 @@ const real={
  async signIn(email,pw){ok(await sb.auth.signInWithPassword({email,password:pw}));return this.me()},
  async signOut(){await sb.auth.signOut()},
  async events(){return ok(await sb.from('events').select('*').order('date'))},
- async saveEvent(ev){const{id,...f}=ev;ok(await(id?sb.from('events').update(f).eq('id',id):sb.from('events').insert(f)));return 0},
- async delEvent(id){ok(await sb.from('events').delete().eq('id',id))},
+ async _srv(method,path,body){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const res=await fetch(SERVER_URL+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:body?JSON.stringify(body):undefined});
+  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Something went wrong. Please try again');return j},
+ async saveEvent(ev){const{id,...f}=ev;await(id?this._srv('PUT','/api/events/'+id,f):this._srv('POST','/api/events',f));return 0},
+ async delEvent(id){await this._srv('DELETE','/api/events/'+id)},
  async register(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
   const res=await fetch(SERVER_URL+'/api/registrations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({eventId:id})});
   const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Could not register. Please try again');return j.registration},
  async pay(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
-  const hl=await(await fetch(SERVER_URL+'/api/health')).json().catch(()=>({}));if(hl.payments!=='mock')throw Error('Online payment is being set up. Please try again soon.');
-  const reg=ok(await sb.from('registrations').select('order_id').eq('id',id).single());
-  const res=await fetch(SERVER_URL+'/api/payments/verify',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({registrationId:id,razorpay_order_id:reg.order_id,razorpay_payment_id:'mock_pay_'+Date.now(),razorpay_signature:'mock_signature'})});
-  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Payment failed. Please try again')},
+  const H={'Content-Type':'application/json',Authorization:'Bearer '+session.access_token};
+  const hl=await(await fetch(SERVER_URL+'/api/health')).json().catch(()=>({}));
+  const reg=ok(await sb.from('registrations').select('order_id,amount,code').eq('id',id).single());
+  const verify=async(o,p,sg)=>{const res=await fetch(SERVER_URL+'/api/payments/verify',{method:'POST',headers:H,body:JSON.stringify({registrationId:id,razorpay_order_id:o,razorpay_payment_id:p,razorpay_signature:sg})});const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Payment failed. Please try again')};
+  if(hl.payments==='mock')return verify(reg.order_id,'mock_pay_'+Date.now(),'mock_signature');
+  if(hl.payments!=='razorpay'||!hl.keyId)throw Error('Online payment is being set up. Please try again soon.');
+  if(!window.Razorpay)await new Promise((res,no)=>{const sc=document.createElement('script');sc.src='https://checkout.razorpay.com/v1/checkout.js';sc.onload=res;sc.onerror=()=>no(Error('Could not load the payment window. Check your internet.'));document.head.appendChild(sc)});
+  return new Promise((res,no)=>{const rz=new Razorpay({key:hl.keyId,order_id:reg.order_id,amount:Math.round(reg.amount*100),currency:'INR',name:'EventKalam',description:'Registration '+reg.code,
+   handler:r=>verify(r.razorpay_order_id,r.razorpay_payment_id,r.razorpay_signature).then(res,no),
+   modal:{ondismiss:()=>no(Error('Payment cancelled. Your seat is held. You can pay later from My registrations.'))}});
+   rz.on('payment.failed',e=>no(Error((e.error&&e.error.description)||'Payment failed')));rz.open()})},
  async cancel(id){ok(await sb.rpc('cancel_registration',{p_reg:id}))},
  async myRegs(u){return ok(await sb.from('registrations').select('*,events(*)').eq('user_id',u).order('created_at',{ascending:false}))},
  async allRegs(){return ok(await sb.from('registrations').select('*,profiles(name,email,phone),events(title,date)').order('created_at',{ascending:false}))},
