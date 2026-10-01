@@ -229,12 +229,14 @@ const F={
  async auth(f){const d=Object.fromEntries(new FormData(f));ME=MODE==='up'?await API.signUp(d.name.trim(),d.email.trim(),d.phone.trim(),d.pw):await API.signIn(d.email.trim(),d.pw);
   if(!ME){MODE='in';toast('Account created. Confirm your email, then log in.');return route()}
   toast('Welcome, '+ME.name);const n=NEXT;NEXT='';go(n||(ME.role==='admin'?'#/admin':'#/'))},
- async ev(f){const d=Object.fromEntries(new FormData(f));if(!d.id)delete d.id;d.capacity=+d.capacity;d.price=+d.price;d.image_url=d.image_url||null;
+ async ev(f){const d=Object.fromEntries(new FormData(f));if(!d.id)delete d.id;
+d.capacity=+d.capacity;d.price=+d.price;d.image_url=d.image_url||null;
   const old=d.id&&AE.find(e=>e.id===d.id);if(old&&d.capacity<old.registered_count)throw Error('Capacity cannot be below current registrations ('+old.registered_count+')');
   const n=await API.saveEvent(d);closeM();toast(n?`Event saved. Announcement email would go to ${n} members (demo).`:'Event saved');route()}
 };
 const run=async fn=>{try{await fn()}catch(e){toast(e.message||'Something went wrong',1)}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;e.preventDefault();run(()=>A[b.dataset.a](b.dataset.id))});
+document.addEventListener('click',e=>{const i=e.target;if(i&&i.matches&&i.matches('input[type=date],input[type=time]')){try{i.showPicker&&i.showPicker()}catch(_){}}});
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-f]');if(!f)return;e.preventDefault();run(()=>F[f.dataset.f](f))});
 
 /* ---------- router and boot ---------- */
