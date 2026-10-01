@@ -10,8 +10,8 @@ h1,h2,h3{line-height:1.25;margin:.4em 0;font-family:'Poppins',system-ui,sans-ser
 .wrap{max-width:1000px;margin:auto;padding:16px}
 .demo{background:var(--warn);color:#fff;padding:6px 12px;font-size:13px;text-align:center}
 .nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--ln);backdrop-filter:saturate(1.4) blur(6px)}
-.brand{font-weight:800;font-family:'Poppins',sans-serif;font-size:1.2rem;color:var(--tx);display:flex;align-items:center;gap:8px}
-.brand img{flex-shrink:0;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
+.brand{font-weight:800;font-family:'Poppins',sans-serif;font-size:1.2rem;color:var(--tx);display:flex;align-items:center;gap:6px}
+.brand::before{content:'';width:9px;height:9px;border-radius:3px;background:linear-gradient(135deg,var(--pr),var(--ac));display:inline-block}
 .nav nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .nav nav a{color:var(--mu);font-weight:600;font-size:14px;transition:color .15s}
 .nav nav a:hover,.nav nav a.cur{color:var(--pr)}
@@ -122,3 +122,9 @@ label{display:block;margin:8px 0;font-size:13px;color:var(--mu)}label input,labe
 .quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0 26px}
 .quick{text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px;border:1px solid var(--ln)}
 .qicon{font-size:22px}
+/* ---- logo + co-founder ---- */
+.brand.logo-brand::before{display:none}
+.logo{height:38px;width:auto;display:block;background:#fff;border-radius:10px;padding:2px 4px}
+.brand.logo-brand{gap:8px}
+.founder+.founder{margin-top:16px}
+.cof{object-position:50% 20%}

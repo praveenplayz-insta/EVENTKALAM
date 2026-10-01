@@ -41,21 +41,32 @@ const mock={
 
 /* ---------- SUPABASE data layer ---------- */
 let sb;const ok=r=>{if(r.error)throw r.error;return r.data};
-const token=async()=>{const{data:{session}}=await sb.auth.getSession();return session?.access_token};
-const api=async(path,opts={})=>{const t=await token();
- const r=await fetch(API_BASE+path,{...opts,headers:{'Content-Type':'application/json',...(t?{Authorization:`Bearer ${t}`}:{}),...opts.headers}});
- const data=await r.json().catch(()=>({}));if(!r.ok||data.success===false)throw Error(data.message||'Request failed');return data};
 const real={
  async me(){const{data:{session}}=await sb.auth.getSession();if(!session)return null;return ok(await sb.from('profiles').select('*').eq('id',session.user.id).single())},
  async signUp(name,email,phone,pw){ok(await sb.auth.signUp({email,password:pw,options:{data:{name,phone}}}));return this.me()},
  async signIn(email,pw){ok(await sb.auth.signInWithPassword({email,password:pw}));return this.me()},
  async signOut(){await sb.auth.signOut()},
  async events(){return ok(await sb.from('events').select('*').order('date'))},
- async saveEvent(ev){const{id,...f}=ev;const d=id?await api(`/api/events/${id}`,{method:'PUT',body:JSON.stringify(f)}):await api('/api/events',{method:'POST',body:JSON.stringify(f)});return 0},
- async delEvent(id){await api(`/api/events/${id}`,{method:'DELETE'})},
- async register(id){const d=await api('/api/registrations',{method:'POST',body:JSON.stringify({eventId:id})});return{...d.registration,payment:d.payment}},
- async paymentInfo(regId){const d=await api(`/api/registrations/${regId}/order`);return d.payment},
- async verifyPayment(body){return(await api('/api/payments/verify',{method:'POST',body:JSON.stringify(body)})).registration},
+ async _srv(method,path,body){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const res=await fetch(SERVER_URL+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:body?JSON.stringify(body):undefined});
+  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Something went wrong. Please try again');return j},
+ async saveEvent(ev){const{id,...f}=ev;await(id?this._srv('PUT','/api/events/'+id,f):this._srv('POST','/api/events',f));return 0},
+ async delEvent(id){await this._srv('DELETE','/api/events/'+id)},
+ async register(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const res=await fetch(SERVER_URL+'/api/registrations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({eventId:id})});
+  const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Could not register. Please try again');return j.registration},
+ async pay(id){const{data:{session}}=await sb.auth.getSession();if(!session)throw Error('Please log in');
+  const H={'Content-Type':'application/json',Authorization:'Bearer '+session.access_token};
+  const hl=await(await fetch(SERVER_URL+'/api/health')).json().catch(()=>({}));
+  const reg=ok(await sb.from('registrations').select('order_id,amount,code').eq('id',id).single());
+  const verify=async(o,p,sg)=>{const res=await fetch(SERVER_URL+'/api/payments/verify',{method:'POST',headers:H,body:JSON.stringify({registrationId:id,razorpay_order_id:o,razorpay_payment_id:p,razorpay_signature:sg})});const j=await res.json().catch(()=>({}));if(!res.ok||!j.success)throw Error(j.message||'Payment failed. Please try again')};
+  if(hl.payments==='mock')return verify(reg.order_id,'mock_pay_'+Date.now(),'mock_signature');
+  if(hl.payments!=='razorpay'||!hl.keyId)throw Error('Online payment is being set up. Please try again soon.');
+  if(!window.Razorpay)await new Promise((res,no)=>{const sc=document.createElement('script');sc.src='https://checkout.razorpay.com/v1/checkout.js';sc.onload=res;sc.onerror=()=>no(Error('Could not load the payment window. Check your internet.'));document.head.appendChild(sc)});
+  return new Promise((res,no)=>{const rz=new Razorpay({key:hl.keyId,order_id:reg.order_id,amount:Math.round(reg.amount*100),currency:'INR',name:'EventKalam',description:'Registration '+reg.code,
+   handler:r=>verify(r.razorpay_order_id,r.razorpay_payment_id,r.razorpay_signature).then(res,no),
+   modal:{ondismiss:()=>no(Error('Payment cancelled. Your seat is held. You can pay later from My registrations.'))}});
+   rz.on('payment.failed',e=>no(Error((e.error&&e.error.description)||'Payment failed')));rz.open()})},
  async cancel(id){ok(await sb.rpc('cancel_registration',{p_reg:id}))},
  async myRegs(u){return ok(await sb.from('registrations').select('*,events(*)').eq('user_id',u).order('created_at',{ascending:false}))},
  async allRegs(){return ok(await sb.from('registrations').select('*,profiles(name,email,phone),events(title,date)').order('created_at',{ascending:false}))},
@@ -65,7 +76,7 @@ let API=mock,ME=null,MODE='in',NEXT='',TAB='home',EV=[],MY=[],AE=[],AR=[],AM=[];
 
 /* ---------- views ---------- */
 const nav=()=>`${API===mock?'<div class="demo">Demo mode: data stays in this browser only. Admin login: admin@demo.com / admin123</div>':''}
-<header class="nav"><a class="brand" href="#/"><img src="logo.png" alt="Robokalam" width="30" height="30">EventKalam</a><nav><a href="#/">Home</a><a href="#/events">Events</a><a href="#/about">About</a><a href="#/showcase">Showcase</a><a href="#" data-a="scrollContact">Contact</a>${ME?'<a href="#/my">My registrations</a>':''}${ME?.role==='admin'?'<a href="#/admin">Admin</a>':''}
+<header class="nav"><a class="brand logo-brand" href="#/" aria-label="EventKalam home"><img class="logo" src="logo.png" alt="">EventKalam</a><nav><a href="#/">Home</a><a href="#/events">Events</a><a href="#/about">About</a><a href="#/showcase">Showcase</a><a href="#" data-a="scrollContact">Contact</a>${ME?'<a href="#/my">My registrations</a>':''}${ME?.role==='admin'?'<a href="#/admin">Admin</a>':''}
 ${ME?`<button class="btn sm ghost" data-a="logout">Log out (${h(ME.name.split(' ')[0])})</button>`:'<a class="btn sm" href="#/login">Log in</a>'}</nav></header>`;
 const footer=()=>`<footer class="site-footer" id="footer-contact"><div class="foot-grid">
 <div><h4>EventKalam</h4><p>Robokalam's event booking and management platform — discover, register and manage tech events with ease.</p></div>
@@ -101,7 +112,10 @@ async function vHome(){EV=(await API.events()).filter(e=>e.status==='published'&
 
  <div class="founder-teaser card reveal"><img src="founder.jpg" alt="Mohammed Sajeed, Founder of Robokalam">
  <div><p class="eyebrow">From our founder</p><blockquote>"My vision is to make Robokalam a globally recognised benchmark in technology development and STEM innovation — inspiring young minds and supporting digital transformation."</blockquote>
- <p><b>Mohammed Sajeed</b> <span class="mu">· Founder, Robokalam</span></p><a href="#/about">Meet the team →</a></div></div>
+ <p><b>Mohammed Sajeed</b> <span class="mu">· Founder, Robokalam</span></p><a href="#/about">Read his full story →</a></div></div>
+ <div class="founder-teaser card reveal"><img class="cof" src="cofounder.jpg" alt="Raja Sekhar Thota, Co-Founder">
+ <div><p class="eyebrow">Our co-founder</p><p style="margin:4px 0">Building technology at the intersection of Artificial Intelligence, Blockchain and Cybersecurity.</p>
+ <p><b>Raja Sekhar Thota</b> <span class="mu">· Co-Founder</span></p><a href="#/about">Read more →</a></div></div>
 
  <section class="closing-cta reveal"><h2>Ready to build tomorrow with us?</h2><p>Create your free account and grab a seat at the next event.</p><a class="btn big glow" href="${ME?'#/events':'#/login'}">${ME?'Browse Events':'Get Started'}</a></section>`}
 function grid(){const q=$('#q').value.toLowerCase(),c=$('#cat').value,t=$('#city').value.toLowerCase();
@@ -113,7 +127,7 @@ async function vEvent(id){const e=(await API.events()).find(x=>x.id===id);if(!e)
  return `<a href="#/">Back to events</a><div class="card pad" style="margin-top:8px"><span class="chip">${h(e.category)}</span> ${chip(e.status)}<h1>${h(e.title)}</h1>
  <div class="facts"><div><small>Date</small>${fmt(e.date)}</div><div><small>Time</small>${h(e.start_time)} to ${h(e.end_time)}</div><div><small>Venue</small>${h(e.venue)}, ${h(e.city)}</div><div><small>Fee</small>${rs(e.price)}</div><div><small>Seats left</small>${left(e)} of ${e.capacity}</div></div>
  <p class="desc">${h(e.description)}</p>${b}</div>`}
-function vAbout(){return `<div class="section-h"><h2>About Robokalam</h2><p>The people and vision behind EventKalam.</p></div>
+function vAbout(){return `<div class="section-h"><h2>About Robokalam</h2><p>The team and vision behind EventKalam.</p></div>
 <div class="card founder"><img src="founder.jpg" alt="Mohammed Sajeed, Founder of Robokalam">
 <div><p class="role">Founder, Robokalam</p><h2>Mohammed Sajeed</h2>
 <p>Sajeed Sir, the Founder of Robokalam, is a visionary leader passionate about technology, innovation, and creating meaningful opportunities for students and organisations. His work reflects a strong commitment to integrity, trust, transparency, accountability and professionalism.</p>
@@ -121,13 +135,11 @@ function vAbout(){return `<div class="section-h"><h2>About Robokalam</h2><p>The 
 <blockquote>"My vision is to make Robokalam a globally recognised benchmark in technology development and STEM innovation — inspiring young minds and supporting digital transformation for forward-thinking organisations."</blockquote>
 <p style="margin-top:14px"><a href="https://robokalam.com/" target="_blank" rel="noopener">Learn more at robokalam.com →</a></p>
 </div></div>
-
-<div class="card founder"><img src="cofounder.jpg" alt="Raja Sekhar Thota, Co-Founder">
+<div class="card founder"><img class="cof" src="cofounder.jpg" alt="Raja Sekhar Thota, Co-Founder">
 <div><p class="role">Co-Founder</p><h2>Raja Sekhar Thota</h2>
-<p>Raja Sekhar Thota is a serial entrepreneur building technology at the intersection of AI, blockchain and cybersecurity. He is also CTO &amp; Co-Founder of AuditOne GmbH, and studied at FOM University of Applied Sciences for Economics and Management.</p>
-<p>His technical leadership and startup experience feed directly into how Robokalam builds and ships its own products, including EventKalam.</p>
+<p>Raja Sekhar Thota is the CTO and Co-Founder of AuditOne GmbH and a serial entrepreneur. He builds technology at the intersection of Artificial Intelligence, Blockchain and Cybersecurity.</p>
+<p>He studied at FOM University of Applied Sciences for Economics and Management.</p>
 </div></div>
-
 <div class="value-grid">${['Integrity','Trust','Transparency','Accountability','Professionalism'].map(v=>`<div class="card">${v}</div>`).join('')}</div>
 <div class="section-h"><h2>Our Team</h2><p>Behind every Robokalam event is a team of mentors, interns and volunteers.</p></div>
 <div class="card team-note pad">Robokalam is powered by a dedicated group of employees, mentors and student interns who run workshops, hackathons and open-mic events across Telangana. Team profiles are being added soon.</div>`}
@@ -180,13 +192,7 @@ function drawRegs(){$('#rt').innerHTML=filt().map(r=>`<tr><td><b>${h(r.code)}</b
 const closeM=()=>$('#m')?.remove();
 const modal=x=>{closeM();const m=document.createElement('div');m.id='m';m.className='modal';m.innerHTML=`<div class="card pad box">${x}</div>`;document.body.appendChild(m)};
 const ask=(msg,a,id)=>modal(`<p>${msg}</p><div class="row"><button class="btn ghost" data-a="closeM">Keep it</button><button class="btn danger" data-a="${a}" data-id="${id}">Yes, continue</button></div>`);
-const payModal=r=>{if(API===mock)return modal(`<h3>Complete payment</h3><p>Registration <b>${h(r.code)}</b></p><div class="amt">${rs(r.amount)}</div><p class="mu">Demo payment: no real money is charged.</p><button class="btn big" data-a="pay" data-id="${r.id}">Pay ${rs(r.amount)}</button><p><button class="btn ghost big" data-a="later">Pay later (seat is held)</button></p>`);
- const mockPay=r.payment?.mode==='mock';
- modal(`<h3>Complete payment</h3><p>Registration <b>${h(r.code)}</b></p><div class="amt">${rs(r.amount)}</div>
- <p class="mu">${mockPay?'Test mode: no real payment gateway keys are set on the server yet.':'You will be taken to Razorpay to complete payment securely.'}</p>
- <button class="btn big" data-a="openRazorpay" data-id="${r.id}">Pay ${rs(r.amount)}</button><p><button class="btn ghost big" data-a="later">Pay later (seat is held)</button></p>`)};
-let RZP_CTX={};
-const loadRazorpay=()=>new Promise((res,rej)=>{if(window.Razorpay)return res();const s=document.createElement('script');s.src='https://checkout.razorpay.com/v1/checkout.js';s.onload=res;s.onerror=()=>rej(Error('Could not load the payment gateway'));document.head.appendChild(s)});
+const payModal=r=>modal(`<h3>Complete payment</h3><p>Registration <b>${h(r.code)}</b></p><div class="amt">${rs(r.amount)}</div><p class="mu">${API===mock?'Demo payment: no real money is charged.':'Test payment. Razorpay is added in the next step.'}</p><button class="btn big" data-a="pay" data-id="${r.id}">Pay ${rs(r.amount)}</button><p><button class="btn ghost big" data-a="later">Pay later (seat is held)</button></p>`);
 const evForm=e=>{e=e||{status:'draft',category:CATS[0],capacity:50,price:0};const opt=(l,v)=>l.map(c=>`<option ${c===v?'selected':''}>${c}</option>`).join('');
  modal(`<h3>${e.id?'Edit event':'New event'}</h3><form data-f="ev"><input type="hidden" name="id" value="${e.id||''}"><label>Title<input name="title" required maxlength="120" value="${h(e.title)}"></label><label>Description<textarea name="description" required rows="3">${h(e.description)}</textarea></label>
  <div class="two"><label>Category<select name="category">${opt(CATS,e.category)}</select></label><label>Status<select name="status">${opt(['draft','published','cancelled','completed'],e.status)}</select></label><label>Date<input type="date" name="date" required value="${e.date||''}"></label><label>City<input name="city" required value="${h(e.city)}"></label>
@@ -202,22 +208,14 @@ const A={closeM,
   document.body.appendChild(lb);lb.addEventListener('click',e=>{if(e.target===lb)closeM()})},
  mode(){MODE=MODE==='in'?'up':'in';route()},
  async logout(){await API.signOut();ME=null;go('#/')},
- async reg(id){if(!ME){NEXT=location.hash;toast('Log in to register for this event');return go('#/login')}const r=await API.register(id);RZP_CTX[r.id]=r;if(r.payment||+r.amount>0)return payModal(r);toast('Registered. Your ID is '+r.code);go('#/my')},
+ async reg(id){if(!ME){NEXT=location.hash;toast('Log in to register for this event');return go('#/login')}const r=await API.register(id);if(+r.amount>0)return payModal(r);toast('Registered. Your ID is '+r.code);go('#/my')},
  async pay(id){await API.pay(id);closeM();toast('Payment received. Seat confirmed.');go('#/my')},
- async openRazorpay(id){const r=RZP_CTX[id];const p=r.payment;
-  if(p.mode==='mock'){await API.verifyPayment({registrationId:id,razorpay_order_id:p.orderId,razorpay_payment_id:'mock_pay_'+id,razorpay_signature:'mock_signature'});closeM();toast('Test payment accepted. Seat confirmed.');return go('#/my')}
-  closeM();await loadRazorpay();
-  new window.Razorpay({key:p.keyId,amount:p.amount,currency:p.currency,order_id:p.orderId,name:'EventKalam',description:'Registration '+r.code,
-   prefill:{name:ME.name,email:ME.email,contact:ME.phone},
-   handler:resp=>run(async()=>{await API.verifyPayment({registrationId:id,razorpay_order_id:resp.razorpay_order_id,razorpay_payment_id:resp.razorpay_payment_id,razorpay_signature:resp.razorpay_signature});toast('Payment received. Seat confirmed.');go('#/my')}),
-   modal:{ondismiss:()=>toast('Payment not completed. You can pay again from My registrations.')}}).open()},
  later(){closeM();toast('Seat held. Pay from My registrations.');go('#/my')},
- async payNow(id){const r=MY.find(x=>x.id===id);if(API!==mock)r.payment=await API.paymentInfo(id);RZP_CTX[id]=r;payModal(r)},
+ payNow(id){payModal(MY.find(x=>x.id===id))},
  cancel(id){ask('Cancel this registration? A paid registration is flagged for refund.','cancelYes',id)},
  async cancelYes(id){await API.cancel(id);closeM();toast('Registration cancelled');route()},
  tab(t){TAB=t;route()},newEv(){evForm()},editEv(id){evForm(AE.find(e=>e.id===id))},
- async toggle(id){const e=AE.find(x=>x.id===id),wasPublished=e.status==='published',n=await API.saveEvent({id,status:wasPublished?'draft':'published'});
-  toast(n?`Published. Announcement email would go to ${n} members (demo).`:wasPublished?'Unpublished':'Published — announcement emails are being sent');route()},
+ async toggle(id){const e=AE.find(x=>x.id===id),n=await API.saveEvent({id,status:e.status==='published'?'draft':'published'});toast(n?`Published. Announcement email would go to ${n} members (demo).`:'Status updated');route()},
  delEv(id){ask('Delete this event permanently?','delYes',id)},
  async delYes(id){await API.delEvent(id);closeM();toast('Event deleted');route()},
  csv(){const c=v=>{let s=String(v??'');if(/^[=+\-@]/.test(s))s="'"+s;return'"'+s.replace(/"/g,'""')+'"'};
@@ -233,7 +231,7 @@ const F={
   toast('Welcome, '+ME.name);const n=NEXT;NEXT='';go(n||(ME.role==='admin'?'#/admin':'#/'))},
  async ev(f){const d=Object.fromEntries(new FormData(f));if(!d.id)delete d.id;d.capacity=+d.capacity;d.price=+d.price;d.image_url=d.image_url||null;
   const old=d.id&&AE.find(e=>e.id===d.id);if(old&&d.capacity<old.registered_count)throw Error('Capacity cannot be below current registrations ('+old.registered_count+')');
-  const n=await API.saveEvent(d);closeM();toast(n?`Event saved. Announcement email would go to ${n} members (demo).`:d.status==='published'?'Event saved — announcement emails are being sent':'Event saved');route()}
+  const n=await API.saveEvent(d);closeM();toast(n?`Event saved. Announcement email would go to ${n} members (demo).`:'Event saved');route()}
 };
 const run=async fn=>{try{await fn()}catch(e){toast(e.message||'Something went wrong',1)}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;e.preventDefault();run(()=>A[b.dataset.a](b.dataset.id))});
